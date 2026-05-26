@@ -1,71 +1,93 @@
-# K8s RabbitMQ
+# K8s Infrastructure
 
-Deploy do **RabbitMQ** utilizando **Kubernetes (K8s)** através de manifests declarativos em YAML.
+Deploy da infraestrutura principal utilizando Kubernetes (K8s) através de manifests declarativos em YAML.
 
-Este repositório demonstra como executar um **message broker RabbitMQ containerizado** dentro de um cluster Kubernetes, permitindo que microserviços se comuniquem de forma **assíncrona utilizando filas de mensagens**.
+Este repositório contém os componentes utilizados pela arquitetura de microserviços do projeto:
 
-RabbitMQ é amplamente utilizado em arquiteturas de microserviços para:
+- RabbitMQ
+- MongoDB
+- Redis
+- Kong API Gateway
 
-* comunicação entre serviços
-* processamento assíncrono
-* filas de tarefas
-* event-driven architecture
+A infraestrutura fornece:
 
-Este projeto faz parte de um conjunto de serviços utilizados para demonstrar **microserviços executando em um cluster Kubernetes**.
+- mensageria assíncrona
+- banco NoSQL
+- cache distribuído
+- API Gateway
+- autenticação JWT
+- comunicação entre microsserviços
+
+Todos os serviços são executados dentro de um cluster Kubernetes.
 
 ---
 
 # Arquitetura
 
-O RabbitMQ atua como intermediário entre serviços.
+```text
+                ┌───────────────┐
+                │     Kong      │
+                │ API Gateway   │
+                └───────┬───────┘
+                        │
+        ┌───────────────┼───────────────┐
+        ↓                               ↓
+   Users API                       Catalog API
+        │                               │
+        │                               │
+        ▼                               ▼
+    RabbitMQ                        MongoDB
+        │
+        ▼
+Notifications
 
-```
-Users API
-     │
-     │ publish event
-     ▼
- RabbitMQ
-     │
-     │ consume message
-     ▼
-Notifications API
-```
-
-Dentro do Kubernetes a estrutura funciona da seguinte forma:
-
-```
-Pods (RabbitMQ)
-      │
-      ▼
-Kubernetes Service
-      │
-      ▼
-Other Microservices
+                     Redis
+                       ▲
+                       │
+                 Catalog Cache
 ```
 
 ---
 
 # Tecnologias Utilizadas
 
-Infraestrutura
+Infraestrutura:
 
-* Docker
-* Kubernetes
-* RabbitMQ
-* YAML Manifests
-* kubectl
+- Docker
+- Kubernetes
+- RabbitMQ
+- MongoDB
+- Redis
+- Kong Gateway
+- YAML Manifests
+- kubectl
 
 ---
 
 # Estrutura do Repositório
 
-```
-k8s-rabbitmq
+```text
+k8s-infra
 │
-├── k8s/
-│   ├── secret.yaml
+├── rabbitmq/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   └── secret.yaml
+│
+├── mongodb/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   └── pvc.yaml
+│
+├── redis/
 │   ├── deployment.yaml
 │   └── service.yaml
+│
+├── kong/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── configmap.yaml
+│   └── secret.yaml
 │
 └── README.md
 ```
@@ -76,30 +98,29 @@ k8s-rabbitmq
 
 Para executar o projeto é necessário possuir instalado:
 
-* Docker
-* Kubernetes cluster
-* kubectl
+- Docker
+- Kubernetes cluster
+- kubectl
 
 Clusters locais recomendados:
 
-* Minikube
-* Kind
-* Docker Desktop Kubernetes
+- Minikube
+- Kind
+- Docker Desktop Kubernetes
 
 ---
 
 # Deploy no Kubernetes
 
-Os manifests Kubernetes estão localizados no diretório:
+Os manifests Kubernetes estão organizados por serviço.
 
-```
-k8s/
-```
-
-Para aplicar todos os recursos:
+Para aplicar toda a infraestrutura:
 
 ```bash
-kubectl apply -f k8s/
+kubectl apply -f rabbitmq/
+kubectl apply -f mongodb/
+kubectl apply -f redis/
+kubectl apply -f kong/
 ```
 
 ---
@@ -112,19 +133,19 @@ Listar todos os recursos criados:
 kubectl get all
 ```
 
-Ver pods do RabbitMQ:
+Ver pods:
 
 ```bash
 kubectl get pods
 ```
 
-Ver service:
+Ver services:
 
 ```bash
 kubectl get svc
 ```
 
-Ver logs do container:
+Ver logs:
 
 ```bash
 kubectl logs <nome-do-pod>
@@ -132,114 +153,158 @@ kubectl logs <nome-do-pod>
 
 ---
 
-# Acessando o RabbitMQ
+# RabbitMQ
 
-RabbitMQ normalmente utiliza as seguintes portas:
+RabbitMQ é responsável pela comunicação assíncrona entre microsserviços.
 
-| Porta | Função                     |
-| ----- | -------------------------- |
-| 5672  | Comunicação AMQP           |
-| 15672 | Interface de gerenciamento |
+Utilizado para:
 
-Caso seja necessário acessar localmente:
+- filas de mensagens
+- processamento assíncrono
+- event-driven architecture
+
+---
+
+# Portas RabbitMQ
+
+| Porta | Função |
+|---|---|
+| 5672 | Comunicação AMQP |
+| 15672 | Interface Web |
+
+---
+
+# Acessando RabbitMQ
 
 ```bash
-kubectl port-forward svc/rabbitmq 5672:5672
+kubectl port-forward svc/rabbitmq 15672:15672
 ```
 
-Interface web:
+URL:
 
-```
+```text
 http://localhost:15672
 ```
 
 ---
 
-# Descrição dos Manifests Kubernetes
+# MongoDB
 
-## Secret
+MongoDB é utilizado como banco NoSQL para persistência de dados.
 
-Arquivo:
-
-```
-k8s/secret.yaml
-```
-
-Armazena dados sensíveis do RabbitMQ.
-
-Exemplos:
-
-* usuário administrador
-* senha
-* credenciais de acesso
-
-Secrets são armazenados em **base64** e consumidos pelos containers como variáveis de ambiente.
+Utilizado principalmente pelo Catalog API.
 
 ---
 
-## Deployment
+# Recursos MongoDB
 
-Arquivo:
-
-```
-k8s/deployment.yaml
-```
-
-Define o Deployment do RabbitMQ.
-
-Responsabilidades:
-
-* criar pods
-* manter pods ativos
-* reiniciar pods em caso de falha
-* permitir atualização da aplicação
-
-Configurações típicas:
-
-* imagem Docker do RabbitMQ
-* portas do container
-* variáveis de ambiente
-* configuração via ConfigMap e Secret
+- persistência de catálogo
+- persistência de jogos
+- persistência de biblioteca do usuário
 
 ---
 
-## Service
+# Acessando MongoDB
 
-Arquivo:
-
+```bash
+kubectl port-forward svc/mongodb 27017:27017
 ```
-k8s/service.yaml
-```
-
-Cria um Service para expor o RabbitMQ dentro do cluster Kubernetes.
-
-Funções:
-
-* endpoint estável
-* comunicação entre microserviços
-* balanceamento de conexões
 
 ---
 
-# Exemplo de Uso
+# Redis
 
-Um microserviço pode publicar mensagens na fila:
+Redis é utilizado como cache distribuído.
 
+Atualmente utilizado para:
+
+- cache de listagem de jogos
+- redução de consultas ao MongoDB
+- melhoria de performance
+
+---
+
+# Acessando Redis
+
+```bash
+kubectl port-forward svc/redis 6379:6379
 ```
-UserCreatedEvent
+
+---
+
+# Kong Gateway
+
+Kong é utilizado como API Gateway da arquitetura.
+
+Responsável por:
+
+- roteamento
+- autenticação JWT
+- proxy reverso
+- controle de entrada dos microsserviços
+
+---
+
+# Rotas do Kong
+
+| Serviço | Rota |
+-------------------------------
+| Users API | `/users` |
+| Catalog API | `/catalog` |
+
+---
+
+# JWT Authentication
+
+O Kong valida tokens JWT antes de encaminhar requisições para APIs protegidas.
+
+Fluxo:
+
+```text
+Client
+   ↓
+Kong Gateway
+   ↓
+JWT Validation
+   ↓
+Microservice
 ```
 
-Outro microserviço pode consumir essa mensagem:
+---
 
+# Acessando Kong
+
+```bash
+kubectl port-forward svc/kong 8000:8000
 ```
-Notifications API → envia email ou push notification
+
+URL:
+
+```text
+http://localhost:8000
 ```
 
-Isso permite:
+---
 
-* desacoplamento entre serviços
-* processamento assíncrono
-* melhor escalabilidade
+# Secrets
+
+A infraestrutura utiliza Kubernetes Secrets para armazenar:
+
+- JWT secret
+- credenciais RabbitMQ
+- senhas de banco
+- configurações sensíveis
+
+---
+
+# Persistent Volumes
+
+Serviços que utilizam persistência:
+
+- MongoDB
+- Grafana
+
+Utilizam PVCs para evitar perda de dados após reinício dos pods.
 
 ---
 
@@ -247,9 +312,13 @@ Isso permite:
 
 Este repositório foi criado para demonstrar:
 
-* execução de RabbitMQ em Kubernetes
-* comunicação assíncrona entre microserviços
-* deploy de infraestrutura usando manifests declarativos
-* arquitetura baseada em eventos
+- infraestrutura de microserviços em Kubernetes
+- arquitetura orientada a eventos
+- mensageria assíncrona
+- API Gateway
+- cache distribuído
+- persistência NoSQL
+- autenticação JWT
+- deploy declarativo com YAML
 
-Ele pode ser utilizado como base para sistemas baseados em **event-driven architecture**.
+A stack pode ser utilizada como base para arquiteturas modernas baseadas em microsserviços.
