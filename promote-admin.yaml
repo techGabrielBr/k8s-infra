@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sqlite-admin
+spec:
+  restartPolicy: Never
+  containers:
+    - name: sqlite
+      image: alpine:3.20
+      command:
+        - sh
+        - -c
+        - |
+          apk add --no-cache sqlite >/dev/null
+          sqlite3 /data/users.db "UPDATE Users SET Role='Admin' WHERE Email='admin@fcg.com'; SELECT Email, Role FROM Users;"
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: users-api-pvc
